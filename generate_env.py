@@ -38,7 +38,7 @@ def generate_env_file():
         env_content.append(f"DB_USER={db_user}")
     else:
         env_content.append(f"DB_USER= # PLEASE SET YOUR DATABASE USER IN settings.ini")
-        logging.error("Database user is not set")
+        logging.warning("Database user is not set")
 
     if db_password:
         env_content.append(f"DB_PASSWORD={db_password}")
@@ -49,13 +49,13 @@ def generate_env_file():
         env_content.append(f"DB_NAME={db_name}")
     else:
         env_content.append(f"DB_NAME= # PLEASE SET YOUR DATABASE NAME IN settings.ini")
-        logging.error("Database user is not set")
+        logging.warning("Database user is not set")
 
     if db_port:
         env_content.append(f"DB_PORT={db_port}")
     else:
         env_content.append(f"DB_PORT= # PLEASE SET YOUR DATABASE PORT IN settings.ini")
-        logging.error("Database port is not set")
+        logging.warning("Database port is not set")
 
     try:
         with open(ENV_FILE_PATH, 'w') as f:
