@@ -22,6 +22,7 @@ def generate_env_file():
         logging.error(f"Error parsing `{SETTINGS_PATH}`: {e}")
         return
     telegram_token = get_setting(config, 'Telegram', 'TOKEN')
+    db_host = get_setting(config, 'Database', 'HOST')
     db_user = get_setting(config, 'Database', 'USER')
     db_password = get_setting(config, 'Database', 'PASSWORD')
     db_name = get_setting(config, 'Database', 'NAME')
@@ -56,6 +57,12 @@ def generate_env_file():
     else:
         env_content.append(f"DB_PORT= # PLEASE SET YOUR DATABASE PORT IN settings.ini")
         logging.warning("Database port is not set")
+
+    if db_host:
+        env_content.append(f"DB_HOST={db_host}")
+    else:
+        env_content.append(f"DB_HOST= # PLEASE SET YOUR DATABASE HOST IN settings.ini")
+        logging.warning("Database host is not set")
 
     try:
         with open(ENV_FILE_PATH, 'w') as f:

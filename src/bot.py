@@ -1,27 +1,29 @@
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from bot.config import settings
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+
+from src.config import settings
+from src.handlers import registration
+from src.database.manager import db_manager
 
 logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = settings.telegram_token
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-
-@dp.message(CommandStart())
-async def send_welcome(message: types.Message):
-    await message.reply("Hello!")
 
 async def main():
     if not BOT_TOKEN:
          logging.error("Bot token not found")
          return
-         
-    logging.info("Starting bot...")
+
+    storage = MemoryStorage()
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher(storage=storage)
+
+    await db_manager.connect()
+    dp.include_router(registration.router)
     await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == '__main__':

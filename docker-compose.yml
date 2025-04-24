@@ -14,7 +14,7 @@ services:
       - kalyanna_network
     restart: unless-stopped
   bot:
-    container_name: kalyanna-bot
+    container_name: kalyanna-src
     build:
       context: .
       dockerfile: Dockerfile

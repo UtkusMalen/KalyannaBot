@@ -1,10 +1,18 @@
 import asyncpg
-from bot.config import settings
+from src.config import settings
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class DatabaseManager:
+    CREATE_USERS_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS users (
+        user_id BIGINT PRIMARY KEY,
+        name VARCHAR(255),
+        phone_number VARCHAR(30),
+        registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    """
     def __init__(self):
         self.host = settings.db_host
         self.port = settings.db_port
@@ -12,6 +20,21 @@ class DatabaseManager:
         self.password = settings.db_password
         self.database = settings.db_name
         self._pool = None
+
+    async def _initialize_schema(self, pool):
+        if not pool:
+            logging.error("Cannot initialize schema, connection pool is not available.")
+            return
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    result = await conn.execute(self.CREATE_USERS_TABLE_SQL)
+                    logging.info(f"Table 'users' checked/created successfully. Result: {result}")
+                    return True
+
+        except Exception as e:
+            logging.error(f"Error during database schema initialization (CREATE TABLE users): {e}")
+            raise
 
     async def connect(self):
         if self._pool is None:
@@ -24,8 +47,11 @@ class DatabaseManager:
                     database=self.database
                 )
                 logging.info(f"Successfully created connection pool for {self.database} in {self.host}:{self.port}")
+
+                await self._initialize_schema(self._pool)
+                logging.info("Database schema initialized successfully.")
             except Exception as e:
-                logging.ERROR(f"Error connecting to database: {e}")
+                logging.error(f"Error connecting to database: {e}")
                 self._pool = None
         return self._pool
 
@@ -41,11 +67,18 @@ class DatabaseManager:
     async def get_connection(self):
         if self._pool is None:
             logging.info("Connection is not set. Trying to connect...")
-            await self.connect()
+            pool = await self.connect()
+            if pool is None:
+                logging.error("Failed to establish database connection after attempt. Cannot acquire connection.")
+                return None
         return self._pool.acquire()
 
     async def execute(self, query, *args):
-        async with self.get_connection() as conn:
+        conn_context = await self.get_connection()
+        if conn_context is None:
+            logging.error(f"Cannot execute query, failed to get connection.")
+            return None
+        async with conn_context as conn:
             if conn is None:
                 return None
             try:
@@ -56,7 +89,11 @@ class DatabaseManager:
                 return None
 
     async def fetch_one(self, query, *args):
-        async with self.get_connection() as conn:
+        conn_context = await self.get_connection()
+        if conn_context is None:
+            logging.error(f"Cannot fetch_one, failed to get connection.")
+            return None
+        async with conn_context as conn:
             if conn is None:
                 return None
             try:
@@ -67,7 +104,11 @@ class DatabaseManager:
                 return None
 
     async def fetch_all(self, query, *args):
-        async with self.get_connection() as conn:
+        conn_context = await self.get_connection()
+        if conn_context is None:
+            logging.error(f"Cannot fetch_all, failed to get connection.")
+            return None
+        async with conn_context as conn:
             if conn is None:
                 return None
             try:

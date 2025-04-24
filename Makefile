@@ -27,17 +27,17 @@ env:
 
 build: env
 	@echo "Building Docker images..."
-	@docker-compose build
+	@docker compose build
 
-up: env
+up: build
 	@echo "Starting services in detached mode..."
-	@docker-compose up -d
+	@docker compose up -d
 
 start: up
 
 down:
 	@echo "Stopping and removing containers..."
-	@docker-compose down
+	@docker compose down
 
 stop: down
 
@@ -45,16 +45,16 @@ restart: down up
 
 logs:
 	@echo "Showing bot logs (press Ctrl+C to exit)..."
-	@docker-compose logs -f bot
+	@docker compose logs -f bot
 
 logs-db:
 	@echo "Showing database logs (press Ctrl+C to exit)..."
-	@docker-compose logs -f db
+	@docker compose logs -f db
 
 logs-all:
 	@echo "Showing logs for all services (press Ctrl+C to exit)..."
-	@docker-compose logs -f
+	@docker compose logs -f
 
 clean:
 	@echo "Stopping containers and removing volumes..."
-	@docker-compose down -v
+	@docker compose down -v
