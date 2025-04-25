@@ -10,7 +10,9 @@ class DatabaseManager:
         user_id BIGINT PRIMARY KEY,
         name VARCHAR(255),
         phone_number VARCHAR(30),
-        registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+        registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        total_spent NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+        hookah_count INTEGER NOT NULL DEFAULT 0
     );
     """
     CREATE_TEMP_CODES_TABLE_SQL = """

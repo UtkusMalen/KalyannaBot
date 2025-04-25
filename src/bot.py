@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from src.config import settings
-from src.handlers import registration, main_menu, qr_handler
+from src.handlers import registration, main_menu, qr_handler, admin_panel
 from src.database.manager import db_manager
 
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +38,7 @@ async def cleanup_expired_codes():
         logging.error(f"Error during expired codes cleanup: {e}", exc_info=True)
 
 async def schedule_cleanup():
-    interval = 600
+    interval = 610
     logging.info(f"Starting periodic cleanup task with interval: {interval} seconds.")
     while True:
         try:
@@ -84,6 +84,7 @@ async def main():
     dp.include_router(registration.router)
     dp.include_router(main_menu.router)
     dp.include_router(qr_handler.router)
+    dp.include_router(admin_panel.router)
 
     await dp.start_polling(bot, skip_updates=True)
 

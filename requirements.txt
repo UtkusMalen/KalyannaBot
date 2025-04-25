@@ -1,4 +1,4 @@
-asyncpg
-aiogram
-pyaml
-qrcode[pil]
+asyncpg~=0.30.0
+aiogram~=3.20.0.post0
+PyYAML
+qrcode[pil]~=8.1

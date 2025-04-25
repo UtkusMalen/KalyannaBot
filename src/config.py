@@ -10,12 +10,14 @@ class Settings:
 
     def __init__(self):
         self.config = configparser.ConfigParser()
+        self.admin_ids: set[int] = set()
         self.config.read(self.CONFIG_FILE, encoding='utf-8')
         self._load_settings()
 
     def _load_settings(self):
         self._load_telegram_settings()
         self._load_database_settings()
+        self._load_admin_settings()
 
     def _load_telegram_settings(self):
         try:
@@ -38,6 +40,30 @@ class Settings:
             self.db_user = None
             self.db_password = None
             self.db_name = None
+
+    def _load_admin_settings(self):
+        try:
+            admin_ids_str = self.config.get('Admin', 'ADMIN_IDS', fallback=None)
+            if admin_ids_str:
+                raw_ids = admin_ids_str.split(',')
+                processed_ids = set()
+                for raw_id in raw_ids:
+                    try:
+                        processed_ids.add(int(raw_id))
+                    except ValueError:
+                        logging.warning(f"Invalid admin ID: {raw_id}")
+                self.admin_ids = processed_ids
+                logging.info(f"Loaded admin IDs: {self.admin_ids}")
+            else:
+                logging.warning("ADMIN_IDS not found or empty in settings.ini. No admins configured.")
+                self.admin_ids = set()
+
+        except configparser.NoSectionError:
+             logging.warning("Section [Admin] not found in settings.ini. No admins configured.")
+             self.admin_ids = set()
+        except Exception as e:
+            logging.error(f"Error loading admin settings: {e}", exc_info=True)
+            self.admin_ids = set()
 
 settings = Settings()
 

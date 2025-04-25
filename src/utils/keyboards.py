@@ -1,6 +1,9 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder, InlineKeyboardButton
 from src.utils.messages import get_message
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_phone_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
@@ -18,7 +21,18 @@ def get_phone_keyboard() -> ReplyKeyboardMarkup:
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(get_generate_qr_button())
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('main_menu.profile_button'),
+            callback_data="action_show_profile"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('main_menu.qr_button'),
+            callback_data="action_generate_user_qr"
+        )
+    )
     return builder.as_markup()
 
 def get_goto_main_menu() -> InlineKeyboardMarkup:
@@ -31,8 +45,15 @@ def get_goto_main_menu() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-def get_generate_qr_button() -> InlineKeyboardButton:
-    return InlineKeyboardButton(
-        text=get_message('main_menu.get_qr_button'),
-        callback_data="action_generate_user_qr"
+def get_profile_keyboard() -> InlineKeyboardMarkup: # Added
+    return get_goto_main_menu()
+
+def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message(''),
+            callback_data="admin:"
+        )
     )
+    return builder.as_markup()
