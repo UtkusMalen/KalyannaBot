@@ -13,6 +13,19 @@ class DatabaseManager:
         registration_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
     """
+    CREATE_TEMP_CODES_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS temporary_codes (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        secret_code VARCHAR(10) NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    """
+    CREATE_TEMP_CODES_INDEX_SQL = """
+    CREATE INDEX IF NOT EXISTS idx_temporary_codes_expires_at ON temporary_codes (expires_at);
+    CREATE INDEX IF NOT EXISTS idx_temporary_codes_user_id_expires ON temporary_codes (user_id, expires_at);
+    """
     def __init__(self):
         self.host = settings.db_host
         self.port = settings.db_port
@@ -28,8 +41,14 @@ class DatabaseManager:
         try:
             async with pool.acquire() as conn:
                 async with conn.transaction():
-                    result = await conn.execute(self.CREATE_USERS_TABLE_SQL)
-                    logging.info(f"Table 'users' checked/created successfully. Result: {result}")
+                    result_users = await conn.execute(self.CREATE_USERS_TABLE_SQL)
+                    logging.info(f"Table 'users' checked/created successfully. Result: {result_users}")
+
+                    result_codes = await conn.execute(self.CREATE_TEMP_CODES_TABLE_SQL)
+                    logging.info(f"Table 'temporary_codes' checked/created successfully. Result: {result_codes}")
+
+                    result_index = await conn.execute(self.CREATE_TEMP_CODES_INDEX_SQL)
+                    logging.info(f"Indexes for 'temporary_codes' checked/created successfully. Result: {result_index}")
                     return True
 
         except Exception as e:
