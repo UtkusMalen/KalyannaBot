@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from src.config import settings
-from src.handlers import registration, main_menu, qr_handler, admin_panel
+from src.handlers import registration, main_menu, qr_handler, admin_panel, profile
 from src.database.manager import db_manager
 
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +85,7 @@ async def main():
     dp.include_router(main_menu.router)
     dp.include_router(qr_handler.router)
     dp.include_router(admin_panel.router)
+    dp.include_router(profile.router)
 
     await dp.start_polling(bot, skip_updates=True)
 
