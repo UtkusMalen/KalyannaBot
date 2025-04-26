@@ -18,6 +18,7 @@ class Settings:
         self._load_telegram_settings()
         self._load_database_settings()
         self._load_admin_settings()
+        self._load_business_logic_settings()
 
     def _load_telegram_settings(self):
         try:
@@ -64,6 +65,27 @@ class Settings:
         except Exception as e:
             logging.error(f"Error loading admin settings: {e}", exc_info=True)
             self.admin_ids = set()
+
+    def _load_business_logic_settings(self):
+        try:
+            self.discount_threshold_per_percent = self.config.getint(
+                'BusinessLogic', 'DISCOUNT_THRESHOLD_PER_PERCENT',
+                fallback=5000
+            )
+            self.free_hookah_every = self.config.getint(
+                'BusinessLogic', 'FREE_HOOKAH_EVERY',
+                fallback=6
+            )
+            self.qr_code_ttl_seconds = self.config.getint(
+                'BusinessLogic', 'QR_CODE_TTL_SECONDS',
+                fallback=600
+            )
+            self.cleanup_interval_seconds = self.config.getint(
+                'BusinessLogic', 'CLEANUP_INTERVAL_SECONDS',
+                fallback=610
+            )
+        except Exception as e:
+            logging.error(f"Error loading buisness logic settings: {e}", exc_info=True)
 
 settings = Settings()
 

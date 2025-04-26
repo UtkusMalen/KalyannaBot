@@ -35,6 +35,16 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
+def get_goto_profile() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('main_menu.profile_button'),
+            callback_data="action_show_profile"
+        )
+    )
+    return builder.as_markup()
+
 def get_goto_main_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
@@ -45,15 +55,29 @@ def get_goto_main_menu() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-def get_profile_keyboard() -> InlineKeyboardMarkup: # Added
-    return get_goto_main_menu()
-
 def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text=get_message(''),
-            callback_data="admin:"
+            text=get_message('admin_panel.enter_token_button'),
+            callback_data="admin:enter_token"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.list_clients_button'),
+            callback_data="admin:list_clients"
         )
     )
     return builder.as_markup()
+
+def get_goto_admin_panel() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.goto_panel'),
+            callback_data="admin:back_to_panel"
+        )
+    )
+    return builder.as_markup()
+
