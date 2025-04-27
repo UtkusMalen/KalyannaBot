@@ -41,32 +41,61 @@ async def set_bot_commands(bot: Bot):
     else:
          logger.warning("No admin IDs configured. Admin commands will not be set.")
 
-async def cleanup_expired_codes():
+async def cleanup_expired_codes(bot: Bot):
+    now_utc = datetime.now(timezone.utc)
+    sql_select_expired = """
+    SELECT id, user_id, message_id FROM temporary_codes
+    WHERE expires_at < $1;
+    """
     try:
-        now_utc = datetime.now(timezone.utc)
-        sql_delete = "DELETE FROM temporary_codes WHERE expires_at < $1;"
-        result = await db_manager.execute(sql_delete, now_utc)
-
-        if result and 'DELETE' in result:
-            try:
-                deleted_count_str = result.split()[-1]
-                deleted_count = int(deleted_count_str)
-                if deleted_count > 0:
-                    logging.info(f"Successfully deleted {deleted_count} expired codes from the database.")
-            except (IndexError, ValueError):
-                logging.warning(f"Cleanup command executed, but no rows deleted: {result}")
-        elif result is None:
-             logging.error("Error while deleting expired codes: DB execute returned None.")
-             pass
+        records = await db_manager.fetch_all(sql_select_expired, now_utc)
+        if records:
+            expired_records = [dict(record) for record in records]
+            logger.info(f"Found {len(expired_records)} expired codes to clean up.")
+        else:
+            logger.info("No expired codes found to clean up.")
+            return
     except Exception as e:
-        logging.error(f"Error while deleting expired codes: {e}", exc_info=True)
+        logger.error(f"Database error selecting expired codes: {e}", exc_info=True)
+        return
 
-async def schedule_cleanup():
+    deleted_count = 0
+    for record in expired_records:
+        code_db_id = record.get('id')
+        user_id = record.get('user_id')
+        message_id = record.get('message_id')
+
+        if not code_db_id or not user_id:
+            logger.warning(f"Skipping invalid record during cleanup: {record}")
+            continue
+
+        if message_id:
+            try:
+                await bot.delete_message(chat_id=user_id, message_id=message_id)
+                logger.info(f"Successfully deleted expired QR message {message_id} for user {user_id}.")
+            except Exception as e:
+                logger.error(f"Error while deleting expired code message: {e}", exc_info=True)
+
+        sql_delete_by_id = "DELETE FROM temporary_codes WHERE id = $1;"
+        try:
+            delete_result = await db_manager.execute(sql_delete_by_id, code_db_id)
+            if delete_result and 'DELETE' in delete_result:
+                deleted_count += 1
+            else:
+                logger.warning(f"Failed to delete expired code with ID {code_db_id}.")
+        except Exception as e:
+            logger.error(f"Error while deleting expired code: {e}", exc_info=True)
+
+    if deleted_count > 0:
+        logger.info(f"Successfully deleted {deleted_count} expired code records from the database.")
+
+
+async def schedule_cleanup(bot: Bot):
     interval = settings.cleanup_interval_seconds
     logging.info(f"Launching cleanup task with interval {interval} seconds:")
     while True:
         try:
-            await cleanup_expired_codes()
+            await cleanup_expired_codes(bot)
         except Exception as e:
             logging.error(f"Unexpected error in cleanup task: {e}", exc_info=True)
 
@@ -74,10 +103,10 @@ async def schedule_cleanup():
 
 async def on_startup(bot: Bot):
     global cleanup_task
-    await db_manager.connect() # Встановлюємо з'єднання з БД
+    await db_manager.connect()
     logging.info("Connection to the database established.")
     await set_bot_commands(bot)
-    cleanup_task = asyncio.create_task(schedule_cleanup())
+    cleanup_task = asyncio.create_task(schedule_cleanup(bot))
     logging.info("Background cleanup task started.")
 
 async def on_shutdown():

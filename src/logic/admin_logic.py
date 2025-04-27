@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TypedDict, Optional, List, Dict, Any
 
+from aiogram import Bot
+
 from src.database.manager import db_manager
 from src.logic.profile_logic import calculate_profile_metrics
 
@@ -53,7 +55,7 @@ async def get_user_initial_data(user_id: int) -> Optional[dict]:
         logger.error(f"Failed to fetch initial data for user {user_id}: {e}", exc_info=True)
         return None
 
-async def finalize_user_update(client_user_id: int,used_token: str,entered_amount: Decimal,hookah_count_added: int,used_free_hookahs: int) -> Optional[UserDataForUpdate]:
+async def finalize_user_update(client_user_id: int,used_token: str,entered_amount: Decimal,hookah_count_added: int,used_free_hookahs: int, bot: Bot) -> Optional[UserDataForUpdate]:
     sql_get_current_counts = """
     SELECT name, hookah_count, free_hookahs_available, total_spent
     FROM users WHERE user_id = $1 FOR UPDATE;
@@ -66,6 +68,7 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
     WHERE user_id = $5 AND free_hookahs_available >= $3
     RETURNING name, total_spent, hookah_count, free_hookahs_available;
     """
+    sql_get_message_id = "SELECT message_id FROM temporary_codes WHERE secret_code = $1 AND user_id = $2;"
     sql_delete_token = "DELETE FROM temporary_codes WHERE secret_code = $1 AND user_id = $2;"
 
     conn_context_manager = await db_manager.get_connection()
@@ -76,6 +79,10 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
 
         async with conn.transaction():
             try:
+                message_record = await conn.fetchrow(sql_get_message_id, used_token, client_user_id)
+                if message_record and message_record['message_id']:
+                    message_to_delete = message_record['message_id']
+                    logger.info(f"Found message_id {message_to_delete} associated with token {used_token} for user {client_user_id}.")
                 current_data = await conn.fetchrow(sql_get_current_counts, client_user_id)
                 if not current_data:
                     logger.error(f"User {client_user_id} not found during final GET. Rolling back.")
@@ -112,7 +119,7 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
 
 
                 logger.info(f"Transaction successful for user {client_user_id}. Final data: {updated_user_data}")
-                return UserDataForUpdate(
+                final_data = UserDataForUpdate(
                     name=updated_user_data['name'],
                     total_spent=updated_user_data['total_spent'],
                     hookah_count=updated_user_data['hookah_count'],
@@ -129,6 +136,16 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
             except Exception as e:
                 logger.error(f"Transaction failed for user {client_user_id}: {e}", exc_info=True)
                 return None
+
+    if message_to_delete:
+        try:
+            await bot.delete_message(chat_id=client_user_id, message_id=message_to_delete)
+            logger.info(f"Successfully deleted QR message {message_to_delete} for user {client_user_id} after admin use.")
+        except Exception as e:
+            logger.error(f"Unexpected error deleting QR message {message_to_delete} for user {client_user_id}: {e}",exc_info=True)
+
+    return final_data
+
 
 async def get_all_clients_data() -> List[Dict[str, Any]] | None:
     sql_get_all = """

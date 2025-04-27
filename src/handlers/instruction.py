@@ -1,9 +1,10 @@
 import logging
-from aiogram import Router, Bot
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
 from src.utils.messages import get_message
+from src.utils.keyboards import get_goto_main_menu
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -20,4 +21,4 @@ async def handle_instruction(message: Message):
         qr_ttl_minutes=settings.qr_code_ttl_seconds // 60
     )
 
-    await message.answer(instruction_text, parse_mode='HTML')
+    await message.answer(instruction_text, parse_mode='HTML', reply_markup=get_goto_main_menu())

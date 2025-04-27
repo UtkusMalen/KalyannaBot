@@ -1,6 +1,7 @@
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import CallbackQuery, Message
 
 from src.utils.messages import get_message
 from src.utils.qr_generator import generate_qr_code_inputfile
@@ -42,6 +43,10 @@ async def handle_generate_user_qr(callback: CallbackQuery, bot: Bot):
 
     if not secret_code:
         await callback.answer("Can't generate QR code. Try again later.", show_alert=True)
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+        except TelegramAPIError:
+            pass
         return
 
     qr_data = secret_code
@@ -49,20 +54,44 @@ async def handle_generate_user_qr(callback: CallbackQuery, bot: Bot):
 
     if not qr_input_file:
         await callback.answer("Can't generate QR code. Try again later.", show_alert=True)
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+        except TelegramAPIError:
+            pass
         return
 
     try:
         ttl_minutes = settings.qr_code_ttl_seconds // 60
-        await bot.send_photo(
+        sent_message = await bot.send_photo(
             chat_id=chat_id,
             photo=qr_input_file,
             caption=get_message('qr_handler.qr_caption', ttl_minutes=ttl_minutes),
             parse_mode='HTML'
         )
         await callback.answer()
+        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
     except Exception as e:
         logger.error(f"Error sending QR Code for user {user_id} in chat {chat_id}: {e}", exc_info=True)
         try:
              await callback.answer("Не вдалося надіслати QR-код.", show_alert=True)
         except:
              pass
+
+    if sent_message:
+        try:
+            sql_update_message_id = """
+            UPDATE temporary_codes SET message_id = $1
+            WHERE secret_code = $2 AND user_id = $3;
+            """
+            update_result = await db_manager.execute(
+                sql_update_message_id,
+                sent_message.message_id,
+                secret_code,
+                user_id
+            )
+            if update_result:
+                logger.info(f"Successfully stored message_id {sent_message.message_id} for code {secret_code} user {user_id}.")
+            else:
+                logger.warning(f"Could not store message_id for code {secret_code} user {user_id}. Update result: {update_result}")
+        except Exception as e:
+            logger.error(f"Failed to store message_id {sent_message.message_id} for code {secret_code} user {user_id}: {e}",exc_info=True)

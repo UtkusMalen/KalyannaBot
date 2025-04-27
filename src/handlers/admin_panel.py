@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime
 
 from aiogram import Router, Bot, F
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -57,6 +57,20 @@ async def handle_back_to_admin_panel(callback: CallbackQuery, state: FSMContext,
             parse_mode='HTML'
         )
         await callback.answer()
+    except TelegramBadRequest as e:
+        if "there is no text in the message to edit" in e.message:
+            logger.warning(f"Could not edit message {message.message_id} (no text). Deleting and sending new one. Error: {e}")
+            try:
+                await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+                await bot.send_message(
+                    chat_id=message.chat.id,
+                    text=get_message('admin_panel.welcome'),
+                    reply_markup=get_admin_panel_keyboard(),
+                    parse_mode='HTML'
+                )
+                await callback.answer()
+            except Exception as e:
+                logger.error(f"Error sending new message for back_to_admin_panel (admin {user_id}): {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Error editing message for back_to_admin_panel (admin {user_id}): {e}", exc_info=True)
         await callback.answer("Сталася помилка.", show_alert=True)
@@ -86,7 +100,7 @@ async def handle_enter_token(callback: CallbackQuery, state: FSMContext, bot: Bo
             text=get_message('admin_panel.enter_token'),
             chat_id=chat_id,
             message_id=message_id,
-            reply_markup=None
+            reply_markup=get_goto_admin_panel()
         )
         await state.set_state(AdminStates.waiting_for_token)
         await state.update_data(message_id=message_id)
@@ -302,7 +316,6 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
     prompt_message_id = context_data.get('message_id')
     used_free_hookahs = context_data.get('used_free_hookahs', 0)
 
-    # Перевірки наявності даних зі стану
     if not all([client_user_id, used_token, entered_amount_str is not None]):
          logger.error(f"Admin {admin_id} in waiting_for_hookah_count, but critical data missing in state: {context_data}")
          await message.answer(get_message('admin_panel.internal_error'), reply_markup=get_goto_admin_panel())
@@ -331,6 +344,7 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
 
         logger.info(f"Calling finalize_user_update for {client_user_id} with: amount={entered_amount}, added_paid={hookah_count_added}, used_free={used_free_hookahs}")
         final_user_data = await admin_logic.finalize_user_update(
+            bot=bot,
             client_user_id=client_user_id,
             used_token=used_token,
             entered_amount=entered_amount,
@@ -416,12 +430,19 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
 @router.callback_query(F.data == "admin:list_clients", AdminFilter())
 async def handle_list_clients(callback: CallbackQuery, bot: Bot):
     admin_id = callback.from_user.id
+    message = callback.message
+    chat_id = message.chat.id
     logger.info(f"Admin {admin_id} requested clients list.")
 
     try:
         await callback.answer(get_message('admin_panel.generating_report'))
     except TelegramAPIError as e:
         logger.error(f"Failed to send answer to admin {admin_id}: {e}", exc_info=True)
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+    except TelegramAPIError as e:
+        logger.error(f"Failed to delete message from admin {admin_id}: {e}", exc_info=True)
 
     csv_content = await admin_logic.generate_clients_report_csv()
 
@@ -435,6 +456,7 @@ async def handle_list_clients(callback: CallbackQuery, bot: Bot):
                 chat_id=admin_id,
                 document=report_file,
                 caption=get_message('admin_panel.report_caption'),
+                reply_markup=get_goto_admin_panel()
             )
             logger.info(f"Report sent to admin {admin_id}.")
         except TelegramAPIError as e:

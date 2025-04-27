@@ -22,7 +22,8 @@ class DatabaseManager:
         user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
         secret_code VARCHAR(10) NOT NULL,
         expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        message_id BIGINT NULL
     );
     """
     CREATE_TEMP_CODES_INDEX_SQL = """

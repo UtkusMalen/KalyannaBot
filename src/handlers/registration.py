@@ -62,7 +62,7 @@ async def handle_name(message: Message, state: FSMContext, bot: Bot):
     edited = False
     if bot_message_id:
         try:
-            await bot.edit_message_text(
+            greeting_msg = await bot.edit_message_text(
                 text=greeting_text,
                 chat_id=chat_id,
                 message_id=bot_message_id,
@@ -73,12 +73,14 @@ async def handle_name(message: Message, state: FSMContext, bot: Bot):
             logger.error(f"Error editing greeting message: {e}")
 
     if not edited:
-        await message.answer(greeting_text, parse_mode='HTML')
+        greeting_msg = await message.answer(greeting_text, parse_mode='HTML')
 
-    await message.answer(
+    phone_prompt = await message.answer(
         text=get_message('registration.phone_prompt'),
         reply_markup=get_phone_keyboard()
     )
+    await state.update_data(greeting_msg=greeting_msg.message_id)
+    await state.update_data(phone_prompt=phone_prompt.message_id)
     await state.set_state(RegistationStates.waiting_for_phone)
 
 @router.message(RegistationStates.waiting_for_phone, F.contact)
@@ -93,10 +95,25 @@ async def handle_phone(message: Message, state: FSMContext, bot: Bot):
 
     user_phone = message.contact.phone_number
     user_id = message.from_user.id
+    chat_id = message.chat.id
 
     if not await save_user_phone(user_id, user_phone):
          await message.answer(get_message('registration.phone_save_error'))
          return
+
+    context_data = await state.get_data()
+    greeting_msg_id = context_data.get('greeting_msg')
+    phone_prompt_id = context_data.get('phone_prompt')
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=greeting_msg_id)
+    except Exception as e:
+        logger.warning(f"Can't delete greeting message: {e}")
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=phone_prompt_id)
+    except Exception as e:
+        logger.warning(f"Can't delete phone prompt message: {e}")
 
     remover_msg = await message.answer(
         get_message('registration.removing_keyboard', default='.'),
