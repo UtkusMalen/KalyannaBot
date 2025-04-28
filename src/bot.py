@@ -10,6 +10,7 @@ from src.config import settings
 from src.handlers import registration, main_menu, qr_handler, admin_main, admin_reports, admin_broadcasts, admin_token_flow, profile, instruction, booking
 from src.database.manager import db_manager
 from src.utils.messages import get_message
+from src.utils.tg_utils import safe_delete_message
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,86 +44,91 @@ async def set_bot_commands(bot: Bot):
 
 async def cleanup_expired_codes(bot: Bot):
     now_utc = datetime.now(timezone.utc)
-    sql_select_expired = """
-    SELECT id, user_id, message_id FROM temporary_codes
-    WHERE expires_at < $1;
+    deleted_messages = 0
+    failed_message_deletions = 0
+
+    sql_delete_expired_returning = """
+    DELETE FROM temporary_codes
+    WHERE expires_at < $1
+    RETURNING user_id, message_id;
     """
+
     try:
-        records = await db_manager.fetch_all(sql_select_expired, now_utc)
-        if records:
-            expired_records = [dict(record) for record in records]
-            logger.info(f"Found {len(expired_records)} expired codes to clean up.")
-        else:
-            logger.info("No expired codes found to clean up.")
+        deleted_records = await db_manager.fetch_all(sql_delete_expired_returning, now_utc)
+
+        if not deleted_records:
+            logger.info("Cleanup: No expired codes found to delete.")
             return
+
+        deleted_count = len(deleted_records)
+        logger.info(f"Cleanup: Deleted {deleted_count} expired code records from the database.")
+
+        for record in deleted_records:
+            user_id = record.get('user_id')
+            message_id = record.get('message_id')
+
+            if not user_id:
+                logger.warning(f"Cleanup: Skipping record with missing user_id: {record}")
+                continue
+
+            if message_id:
+                try:
+                    await safe_delete_message(bot, chat_id=user_id, message_id=message_id)
+                    deleted_messages += 1
+                except Exception:
+                    logger.warning(f"Cleanup: Failed attempt to delete message {message_id} for user {user_id}. Error logged by safe_delete_message.")
+                    failed_message_deletions += 1
+
+        log_summary = f"Cleanup finished: DB records deleted: {deleted_count}."
+        if deleted_messages > 0 or failed_message_deletions > 0:
+            log_summary += f" TG messages deleted: {deleted_messages}, Failed TG deletions: {failed_message_deletions}."
+        logger.info(log_summary)
+
     except Exception as e:
-        logger.error(f"Database error selecting expired codes: {e}", exc_info=True)
-        return
-
-    deleted_count = 0
-    for record in expired_records:
-        code_db_id = record.get('id')
-        user_id = record.get('user_id')
-        message_id = record.get('message_id')
-
-        if not code_db_id or not user_id:
-            logger.warning(f"Skipping invalid record during cleanup: {record}")
-            continue
-
-        if message_id:
-            try:
-                await bot.delete_message(chat_id=user_id, message_id=message_id)
-                logger.info(f"Successfully deleted expired QR message {message_id} for user {user_id}.")
-            except Exception as e:
-                logger.error(f"Error while deleting expired code message: {e}", exc_info=True)
-
-        sql_delete_by_id = "DELETE FROM temporary_codes WHERE id = $1;"
-        try:
-            delete_result = await db_manager.execute(sql_delete_by_id, code_db_id)
-            if delete_result and 'DELETE' in delete_result:
-                deleted_count += 1
-            else:
-                logger.warning(f"Failed to delete expired code with ID {code_db_id}.")
-        except Exception as e:
-            logger.error(f"Error while deleting expired code: {e}", exc_info=True)
-
-    if deleted_count > 0:
-        logger.info(f"Successfully deleted {deleted_count} expired code records from the database.")
+        logger.error(f"Cleanup: Database error during expired code deletion: {e}", exc_info=True)
 
 
 async def schedule_cleanup(bot: Bot):
     interval = settings.cleanup_interval_seconds
-    logging.info(f"Launching cleanup task with interval {interval} seconds:")
+    logger.info(f"Starting background cleanup task. Interval: {interval} seconds.")
     while True:
         try:
             await cleanup_expired_codes(bot)
         except Exception as e:
-            logging.error(f"Unexpected error in cleanup task: {e}", exc_info=True)
+            logger.error(f"Cleanup Task: Unexpected error in schedule_cleanup loop: {e}", exc_info=True)
+            await asyncio.sleep(interval * 2)
+            continue
 
         await asyncio.sleep(interval)
 
+
 async def on_startup(bot: Bot):
     global cleanup_task
-    await db_manager.connect()
-    logging.info("Connection to the database established.")
-    await set_bot_commands(bot)
-    cleanup_task = asyncio.create_task(schedule_cleanup(bot))
-    logging.info("Background cleanup task started.")
+    try:
+        await db_manager.connect()
+        logger.info("Database connection established.")
+        await set_bot_commands(bot)
+        if cleanup_task is None:
+            cleanup_task = asyncio.create_task(schedule_cleanup(bot))
+            logger.info("Background cleanup task scheduled.")
+    except Exception as e:
+         logger.critical(f"Startup failed: Could not connect to DB or set commands. Error: {e}", exc_info=True)
+
 
 async def on_shutdown():
     global cleanup_task
+    logger.info("Shutting down...")
     if cleanup_task and not cleanup_task.done():
         cleanup_task.cancel()
         try:
             await cleanup_task
         except asyncio.CancelledError:
-            logging.info("Cleanup task was canceled.")
+            logger.info("Cleanup task successfully cancelled.")
         except Exception as e:
-            logging.error(f"Error while canceling cleanup task: {e}", exc_info=True)
+            logger.error(f"Error during cleanup task cancellation: {e}", exc_info=True)
 
-    # Закриваємо з'єднання з БД
     await db_manager.close()
-    logging.info("Connection to the database closed.")
+    logger.info("Database connection pool closed.")
 
 async def main():
     if not BOT_TOKEN:
