@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time, timedelta
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 
 from src.config import settings
+from src.database.backup import create_db_backup
 from src.handlers import registration, main_menu, qr_handler, admin_main, admin_reports, admin_broadcasts, admin_token_flow, profile, instruction, booking
 from src.database.manager import db_manager
 from src.utils.messages import get_message
@@ -19,6 +20,39 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = settings.telegram_token
 
 cleanup_task = None
+backup_task = None
+
+async def schedule_daily_backup():
+    BACKUP_TIME_UTC = time(3, 0, 0)
+
+    logger.info(f"Starting background daily backup task. Scheduled time (UTC): {BACKUP_TIME_UTC.strftime('%H:%M:%S')}.")
+
+    while True:
+        now_utc = datetime.now(timezone.utc)
+        today_backup_time = datetime.combine(now_utc.date(), BACKUP_TIME_UTC, tzinfo=timezone.utc)
+
+        if now_utc > today_backup_time:
+            next_run_time = today_backup_time + timedelta(days=1)
+        else:
+            next_run_time = today_backup_time
+
+        wait_seconds = (next_run_time - now_utc).total_seconds()
+
+        logger.info(f"Next backup scheduled at: {next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}. Waiting for {wait_seconds:.0f} seconds.")
+
+        await asyncio.sleep(wait_seconds)
+
+        logger.info("Starting scheduled daily database backup...")
+        try:
+            success = await create_db_backup()
+            if success:
+                logger.info("Scheduled daily backup completed successfully.")
+            else:
+                logger.error("Scheduled daily backup failed.")
+        except Exception as e:
+            logger.error(f"Backup Task: Unexpected error in schedule_daily_backup loop during backup execution: {e}", exc_info=True)
+            await asyncio.sleep(60)
+        await asyncio.sleep(1)
 
 async def set_bot_commands(bot: Bot):
     user_commands = [
@@ -103,7 +137,7 @@ async def schedule_cleanup(bot: Bot):
 
 
 async def on_startup(bot: Bot):
-    global cleanup_task
+    global cleanup_task, backup_task
     try:
         await db_manager.connect()
         logger.info("Database connection established.")
@@ -111,13 +145,26 @@ async def on_startup(bot: Bot):
         if cleanup_task is None:
             cleanup_task = asyncio.create_task(schedule_cleanup(bot))
             logger.info("Background cleanup task scheduled.")
+        if backup_task is None:
+            backup_task = asyncio.create_task(schedule_daily_backup())
+            logger.info("Background daily backup task scheduled.")
+
     except Exception as e:
          logger.critical(f"Startup failed: Could not connect to DB or set commands. Error: {e}", exc_info=True)
 
 
 async def on_shutdown():
-    global cleanup_task
+    global cleanup_task, backup_task
     logger.info("Shutting down...")
+    if backup_task and not backup_task.done():
+        backup_task.cancel()
+        try:
+            await backup_task
+        except asyncio.CancelledError:
+            logger.info("Backup task successfully cancelled.")
+        except Exception as e:
+            logger.error(f"Error during backup task cancellation: {e}", exc_info=True)
+
     if cleanup_task and not cleanup_task.done():
         cleanup_task.cancel()
         try:
