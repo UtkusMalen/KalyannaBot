@@ -17,7 +17,6 @@ async def handle_instruction(message: Message):
 
     instruction_text = get_message(
         'instruction.text',
-        discount_threshold=settings.discount_threshold_per_percent,
         qr_ttl_minutes=settings.qr_code_ttl_seconds // 60
     )
 

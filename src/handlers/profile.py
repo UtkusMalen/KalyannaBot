@@ -7,8 +7,10 @@ from typing import TypedDict, Optional
 
 from src.utils.messages import get_message
 from src.utils.keyboards import get_goto_main_menu
+from src.utils.progress_bar import generate_progress_bar
 from src.database.manager import db_manager
 from src.logic.profile_logic import calculate_profile_metrics
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -61,67 +63,99 @@ async def display_profile(target: Message | CallbackQuery, bot: Bot):
     profile_data = await get_user_profile_data(user_id)
 
     if profile_data:
-        name = profile_data.get('name', 'Guest')
-        hookah_count = profile_data.get('hookah_count', 0)
+        name = profile_data.get('name', 'Гість')
         total_spent = profile_data.get('total_spent', Decimal('0.00'))
+        hookah_count = profile_data.get('hookah_count', 0)
         available_free_hookahs = profile_data.get('free_hookahs_available', 0)
 
         metrics = calculate_profile_metrics(total_spent, hookah_count)
         discount_percent = metrics['discount_percent']
+        next_discount_percent = metrics['next_discount_percent']
+        progress_percent_to_next_discount = metrics['progress_percent_to_next_discount']
+        amount_needed = metrics['amount_needed_for_next_discount']
         hookahs_needed_for_free = metrics['hookahs_needed_for_free']
-
-        if discount_percent > 0:
-            discount_line = get_message('profile.discount_line', discount_percent=discount_percent)
-        else:
-            discount_line = get_message('profile.no_discount_yet')
-
-        if available_free_hookahs > 0:
-            free_hookah_available_line = get_message('profile.free_hookah_available_line', free_hookah_count=available_free_hookahs)
-        else:
-            free_hookah_available_line = get_message('profile.no_free_hookah_available', default="")
-
-        if hookahs_needed_for_free < 999:
-             free_hookah_progress_line = get_message('profile.free_hookah_progress_line', hookahs_needed_for_free=hookahs_needed_for_free)
-        else:
-             free_hookah_progress_line = ""
+        hookah_progress_percent = metrics['hookah_progress_percent']
 
         user_mention = user.mention_html(name)
+
+        discount_progress_section = ""
+        if next_discount_percent is not None and amount_needed is not None:
+            discount_progress_bar = generate_progress_bar(progress_percent_to_next_discount)
+            amount_needed_str = f"{amount_needed:.2f} грн"
+            discount_progress_section = get_message(
+                'profile.discount_progress_section_template',
+                next_discount_percent=next_discount_percent,
+                discount_progress_bar=discount_progress_bar,
+                discount_progress_percent=progress_percent_to_next_discount,
+                amount_needed=amount_needed_str
+            )
+        elif discount_percent > 0:
+            discount_progress_section = get_message('profile.discount_max_level_reached')
+
+        hookah_progress_section = ""
+        if settings.free_hookah_every > 0 and hookahs_needed_for_free != 999:
+            hookah_progress_bar = generate_progress_bar(hookah_progress_percent)
+            hookah_progress_section = get_message(
+                 'profile.hookah_progress_section_template',
+                 hookahs_needed_for_free=hookahs_needed_for_free,
+                 hookah_progress_bar=hookah_progress_bar,
+                 hookah_progress_percent=hookah_progress_percent
+            )
+
+        free_hookah_available_line = ""
+        if available_free_hookahs > 0:
+            free_hookah_available_line = get_message(
+                'profile.free_hookah_available_line_template',
+                free_hookah_count=available_free_hookahs
+            )
+
+        bonus_section = get_message('profile.bonus_section_template')
+        benefits_section = get_message('profile.benefits_section_template')
 
         profile_text = get_message(
             'profile.display',
             name=user_mention,
-            total_spent=f"{total_spent:.2f}",
-            discount_line=discount_line,
-            hookah_count=hookah_count,
+            discount_percent=discount_percent,
+            discount_progress_section=discount_progress_section,
+            hookah_progress_section=hookah_progress_section,
             free_hookah_available_line=free_hookah_available_line,
-            free_hookah_progress_line=free_hookah_progress_line,
+            bonus_section=bonus_section,
+            benefits_section=benefits_section
         )
+
     else:
         profile_text = get_message('profile.not_found')
 
     try:
+        reply_markup = get_goto_main_menu()
         if is_edit and isinstance(target, CallbackQuery):
             await bot.edit_message_text(
                 text=profile_text,
                 chat_id=chat_id,
                 message_id=message_id,
                 parse_mode='HTML',
-                reply_markup=get_goto_main_menu()
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
             )
             await target.answer()
         elif not is_edit and isinstance(target, Message):
              await target.answer(
                  text=profile_text,
                  parse_mode='HTML',
-                 reply_markup=get_goto_main_menu()
+                 reply_markup=reply_markup,
+                 disable_web_page_preview=True
              )
     except Exception as e:
         logger.error(f"Error displaying profile for user {user_id}: {e}", exc_info=True)
+        error_message = "Помилка відображення профілю."
         if isinstance(target, CallbackQuery):
-             await target.answer("Помилка відображення профілю.", show_alert=True)
+             try:
+                 await target.answer(error_message, show_alert=True)
+             except Exception: pass
         elif isinstance(target, Message):
-             await target.answer("Помилка відображення профілю.")
-
+             try:
+                 await target.answer(error_message)
+             except Exception: pass
 
 @router.callback_query(F.data == "action_show_profile")
 async def handle_show_profile_callback(callback: CallbackQuery, bot: Bot):

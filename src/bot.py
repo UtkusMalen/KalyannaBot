@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 
 from src.config import settings
-from src.handlers import registration, main_menu, qr_handler, admin_panel, profile, instruction
+from src.handlers import registration, main_menu, qr_handler, admin_main, admin_reports, admin_broadcasts, admin_token_flow, profile, instruction, booking
 from src.database.manager import db_manager
 from src.utils.messages import get_message
 
@@ -139,9 +139,13 @@ async def main():
     dp.include_router(registration.router)
     dp.include_router(main_menu.router)
     dp.include_router(qr_handler.router)
-    dp.include_router(admin_panel.router)
+    dp.include_router(admin_main.router)
+    dp.include_router(admin_token_flow.router)
+    dp.include_router(admin_reports.router)
+    dp.include_router(admin_broadcasts.router)
     dp.include_router(profile.router)
     dp.include_router(instruction.router)
+    dp.include_router(booking.router)
 
     logging.info("Запуск бота...")
     await dp.start_polling(bot)

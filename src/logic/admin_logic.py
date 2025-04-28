@@ -207,3 +207,18 @@ async def generate_clients_report_csv() -> str | None:
     report.close()
     logger.info("CSV report generated successfully.")
     return csv_content
+
+async def get_all_user_ids() -> List[int] | None:
+    sql_get_ids = "SELECT user_id FROM users ORDER BY user_id";
+    try:
+        user_records = await db_manager.fetch_all(sql_get_ids)
+        if user_records:
+            user_ids = [record['user_id'] for record in user_records]
+            logger.info(f"Fetched {len(user_ids)} user IDs for broadcast.")
+            return user_ids
+        else:
+            logger.warning("No user IDs found in the database.")
+            return []
+    except Exception as e:
+        logger.error(f"Failed to fetch user IDs: {e}", exc_info=True)
+        return None

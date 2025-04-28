@@ -11,6 +11,10 @@ class Settings:
     def __init__(self):
         self.config = configparser.ConfigParser()
         self.admin_ids: set[int] = set()
+        self.menu_url: str | None = None
+        self.booking_phone_number: str | None = None
+        self.instagram_url: str | None = None
+        self.tiktok_url: str | None = None
         self.config.read(self.CONFIG_FILE, encoding='utf-8')
         self._load_settings()
 
@@ -68,22 +72,13 @@ class Settings:
 
     def _load_business_logic_settings(self):
         try:
-            self.discount_threshold_per_percent = self.config.getint(
-                'BusinessLogic', 'DISCOUNT_THRESHOLD_PER_PERCENT',
-                fallback=5000
-            )
-            self.free_hookah_every = self.config.getint(
-                'BusinessLogic', 'FREE_HOOKAH_EVERY',
-                fallback=6
-            )
-            self.qr_code_ttl_seconds = self.config.getint(
-                'BusinessLogic', 'QR_CODE_TTL_SECONDS',
-                fallback=600
-            )
-            self.cleanup_interval_seconds = self.config.getint(
-                'BusinessLogic', 'CLEANUP_INTERVAL_SECONDS',
-                fallback=610
-            )
+            self.free_hookah_every = self.config.getint('BusinessLogic', 'FREE_HOOKAH_EVERY',fallback=6)
+            self.qr_code_ttl_seconds = self.config.getint('BusinessLogic', 'QR_CODE_TTL_SECONDS',fallback=600)
+            self.cleanup_interval_seconds = self.config.getint('BusinessLogic', 'CLEANUP_INTERVAL_SECONDS',fallback=610)
+            self.menu_url = self.config.get("BusinessLogic", "MENU_URL", fallback=None)
+            self.booking_phone_number = self.config.get("BusinessLogic", "BOOKING_PHONE_NUMBER", fallback=None)
+            self.instagram_url = self.config.get("BusinessLogic", "INSTAGRAM_URL", fallback=None)
+            self.tiktok_url = self.config.get("BusinessLogic", "TIKTOK_URL", fallback=None)
         except Exception as e:
             logging.error(f"Error loading buisness logic settings: {e}", exc_info=True)
 

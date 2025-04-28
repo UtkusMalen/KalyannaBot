@@ -1,6 +1,7 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder, InlineKeyboardButton
 from src.utils.messages import get_message
+from src.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,19 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text=get_message('main_menu.qr_button'),
             callback_data="action_generate_user_qr"
+        )
+    )
+    if settings.menu_url:
+        builder.row(
+            InlineKeyboardButton(
+                text=get_message('main_menu.our_menu_button'),
+                url=settings.menu_url
+            )
+        )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('main_menu.book_table_button'),
+            callback_data="action_show_booking_info"
         )
     )
     return builder.as_markup()
@@ -67,6 +81,26 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text=get_message('admin_panel.list_clients_button'),
             callback_data="admin:list_clients"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.broadcast_button'),
+            callback_data="admin:start_broadcast"
+        )
+    )
+    return builder.as_markup()
+
+def get_broadcast_confirmation_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.confirm_yes'),
+            callback_data="admin:confirm_broadcast_yes"
+        ),
+        InlineKeyboardButton(
+            text=get_message('admin_panel.confirm_no'),
+            callback_data="admin:confirm_broadcast_no"
         )
     )
     return builder.as_markup()
