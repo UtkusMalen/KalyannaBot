@@ -30,6 +30,8 @@ services:
     networks:
       - kalyanna_network
     restart: unless-stopped
+    volumes:
+      - ./src/db_backups:/app/db_backups
 networks:
   kalyanna_network:
     driver: bridge

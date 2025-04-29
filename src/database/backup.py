@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
-BACKUP_DIR = Path(settings.BASE_DIR) / "db_backups"
+BACKUP_DIR = Path("/app/db_backups")
 BACKUP_DIR.mkdir(exist_ok=True)
 
 async def create_db_backup() -> bool:
