@@ -11,6 +11,7 @@ class Settings:
     def __init__(self):
         self.config = configparser.ConfigParser()
         self.admin_ids: set[int] = set()
+        self.super_admin_ids: set[int] = set()
         self.menu_url: str | None = None
         self.booking_phone_number: str | None = None
         self.instagram_url: str | None = None
@@ -48,27 +49,30 @@ class Settings:
 
     def _load_admin_settings(self):
         try:
-            admin_ids_str = self.config.get('Admin', 'ADMIN_IDS', fallback=None)
+            admin_ids_str = self.config.get('Admin', 'ADMIN_IDS', fallback='')
             if admin_ids_str:
-                raw_ids = admin_ids_str.split(',')
-                processed_ids = set()
-                for raw_id in raw_ids:
-                    try:
-                        processed_ids.add(int(raw_id))
-                    except ValueError:
-                        logging.warning(f"Invalid admin ID: {raw_id}")
-                self.admin_ids = processed_ids
+                self.admin_ids = {int(id.strip()) for id in admin_ids_str.split(',') if id.strip().isdigit()}
                 logging.info(f"Loaded admin IDs: {self.admin_ids}")
             else:
-                logging.warning("ADMIN_IDS not found or empty in settings.ini. No admins configured.")
+                logging.warning("ADMIN_IDS not found or empty in settings.ini. No regular admins configured.")
                 self.admin_ids = set()
 
-        except configparser.NoSectionError:
-             logging.warning("Section [Admin] not found in settings.ini. No admins configured.")
-             self.admin_ids = set()
+            super_admin_ids_str = self.config.get('Admin', 'SUPER_ADMIN_IDS', fallback='')
+            if super_admin_ids_str:
+                self.super_admin_ids = {int(id.strip()) for id in super_admin_ids_str.split(',') if id.strip().isdigit()}
+                logging.info(f"Loaded super admin IDs: {self.super_admin_ids}")
+                missing_admins = self.super_admin_ids - self.admin_ids
+                if missing_admins:
+                    logging.warning(
+                        f"Super admin IDs {missing_admins} are not listed in ADMIN_IDS. Adding them to admin_ids.")
+                    self.admin_ids.update(missing_admins)
+            else:
+                logging.warning("SUPER_ADMIN_IDS not found or empty in settings.ini. No super admins configured.")
+                self.super_admin_ids = set()
         except Exception as e:
             logging.error(f"Error loading admin settings: {e}", exc_info=True)
             self.admin_ids = set()
+            self.super_admin_ids = set()
 
     def _load_business_logic_settings(self):
         try:

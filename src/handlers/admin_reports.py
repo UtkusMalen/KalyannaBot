@@ -6,14 +6,14 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, BufferedInputFile
 
 from src.logic import admin_logic
-from src.filters.admin_filter import AdminFilter
+from src.filters.super_admin_filter import SuperAdminFilter
 from src.utils.keyboards import get_goto_admin_panel
 from src.utils.messages import get_message
 from src.utils.tg_utils import safe_delete_message
 
 logger = logging.getLogger(__name__)
 router = Router()
-router.callback_query.filter(AdminFilter())
+router.callback_query.filter(SuperAdminFilter())
 
 @router.callback_query(F.data == "admin:list_clients")
 async def handle_list_clients(callback: CallbackQuery, bot: Bot):

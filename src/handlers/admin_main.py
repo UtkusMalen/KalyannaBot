@@ -22,7 +22,7 @@ async def handle_admin_command(message: Message, state: FSMContext):
     logger.info(f"Admin {user_id} accessed the admin panel.")
     await message.answer(
         text=get_message('admin_panel.welcome'),
-        reply_markup=get_admin_panel_keyboard(),
+        reply_markup=get_admin_panel_keyboard(user_id),
         parse_mode='HTML'
     )
 
@@ -45,7 +45,7 @@ async def handle_back_to_admin_panel(callback: CallbackQuery, state: FSMContext,
                 text=target_text,
                 chat_id=message.chat.id,
                 message_id=message.message_id,
-                reply_markup=get_admin_panel_keyboard(),
+                reply_markup=get_admin_panel_keyboard(user_id),
                 parse_mode='HTML'
             )
         await callback.answer()
@@ -80,6 +80,6 @@ async def handle_back_to_admin_panel(callback: CallbackQuery, state: FSMContext,
         await callback.answer("Сталася непередбачена помилка.", show_alert=True)
         await message.answer(
             text=get_message('admin_panel.welcome'),
-            reply_markup=get_admin_panel_keyboard(),
+            reply_markup=get_admin_panel_keyboard(user_id),
             parse_mode='HTML'
         )

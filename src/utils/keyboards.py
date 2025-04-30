@@ -69,7 +69,7 @@ def get_goto_main_menu() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
+def get_admin_panel_keyboard(user_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -77,18 +77,19 @@ def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
             callback_data="admin:enter_token"
         )
     )
-    builder.row(
-        InlineKeyboardButton(
-            text=get_message('admin_panel.list_clients_button'),
-            callback_data="admin:list_clients"
+    if user_id in settings.super_admin_ids:
+        builder.row(
+            InlineKeyboardButton(
+                text=get_message('admin_panel.list_clients_button'),
+                callback_data="admin:list_clients"
+            )
         )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text=get_message('admin_panel.broadcast_button'),
-            callback_data="admin:start_broadcast"
+        builder.row(
+            InlineKeyboardButton(
+                text=get_message('admin_panel.broadcast_button'),
+                callback_data="admin:start_broadcast"
+            )
         )
-    )
     return builder.as_markup()
 
 def get_broadcast_confirmation_keyboard() -> InlineKeyboardMarkup:

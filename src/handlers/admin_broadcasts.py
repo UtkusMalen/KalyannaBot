@@ -7,16 +7,16 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from src.filters.super_admin_filter import SuperAdminFilter
 from src.logic.admin_logic import get_all_user_ids
-from src.filters.admin_filter import AdminFilter
 from src.utils.keyboards import get_admin_panel_keyboard, get_goto_admin_panel, get_broadcast_confirmation_keyboard
 from src.utils.messages import get_message
 from src.utils.tg_utils import safe_delete_message
 
 logger = logging.getLogger(__name__)
 router = Router()
-router.message.filter(AdminFilter())
-router.callback_query.filter(AdminFilter())
+router.message.filter(SuperAdminFilter())
+router.callback_query.filter(SuperAdminFilter())
 
 class AdminBroadcastStates(StatesGroup):
     waiting_for_broadcast_message = State()
