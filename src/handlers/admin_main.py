@@ -40,7 +40,7 @@ async def handle_back_to_admin_panel(callback: CallbackQuery, state: FSMContext,
     try:
         current_text = message.text or ""
         target_text = get_message('admin_panel.welcome')
-        if current_text != target_text or message.reply_markup != get_admin_panel_keyboard():
+        if current_text != target_text or message.reply_markup != get_admin_panel_keyboard(user_id):
             await bot.edit_message_text(
                 text=target_text,
                 chat_id=message.chat.id,
@@ -59,7 +59,7 @@ async def handle_back_to_admin_panel(callback: CallbackQuery, state: FSMContext,
                 await bot.send_message(
                     chat_id=message.chat.id,
                     text=get_message('admin_panel.welcome'),
-                    reply_markup=get_admin_panel_keyboard(),
+                    reply_markup=get_admin_panel_keyboard(user_id),
                     parse_mode='HTML'
                 )
                 await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
@@ -72,7 +72,7 @@ async def handle_back_to_admin_panel(callback: CallbackQuery, state: FSMContext,
              await callback.answer("Сталася помилка.", show_alert=True)
              await message.answer(
                  text=get_message('admin_panel.welcome'),
-                 reply_markup=get_admin_panel_keyboard(),
+                 reply_markup=get_admin_panel_keyboard(user_id),
                  parse_mode='HTML'
              )
     except Exception as e:
