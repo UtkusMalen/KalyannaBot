@@ -209,7 +209,7 @@ async def generate_clients_report_csv() -> str | None:
     return csv_content
 
 async def get_all_user_ids() -> List[int] | None:
-    sql_get_ids = "SELECT user_id FROM users ORDER BY user_id";
+    sql_get_ids = "SELECT user_id FROM users ORDER BY user_id;"
     try:
         user_records = await db_manager.fetch_all(sql_get_ids)
         if user_records:

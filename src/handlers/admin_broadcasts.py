@@ -49,7 +49,7 @@ async def handle_start_broadcast(callback: CallbackQuery, state: FSMContext, bot
         await callback.answer("Сталася помилка.", show_alert=True)
         await message.answer(
             text=get_message('admin_panel.welcome'),
-            reply_markup=get_admin_panel_keyboard(),
+            reply_markup=get_admin_panel_keyboard(admin_id),
             parse_mode='HTML'
         )
         await state.clear()
