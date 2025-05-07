@@ -149,7 +149,7 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
 
 async def get_all_clients_data() -> List[Dict[str, Any]] | None:
     sql_get_all = """
-    SELECT user_id, name, phone_number, total_spent, hookah_count, free_hookahs_available FROM users
+    SELECT user_id, name, phone_number, total_spent, hookah_count, free_hookahs_available, registration_date FROM users
     ORDER BY registration_date ASC;
     """
     try:
@@ -172,7 +172,7 @@ async def generate_clients_report_csv() -> str | None:
     report = io.StringIO()
     writer = csv.writer(report, dialect='excel', lineterminator='\n')
     header = [
-        "Ім'я", "Телефон", "Сума витрат (грн)", "К-сть платних кальянів", "Доступно безкоштовних", "поточна знижка %"
+        "Ім'я", "Телефон", "Сума витрат (грн)", "К-сть платних кальянів", "Доступно безкоштовних", "поточна знижка %", "Дата реєстрації"
     ]
     writer.writerow(header)
 
@@ -187,6 +187,7 @@ async def generate_clients_report_csv() -> str | None:
             metrics = calculate_profile_metrics(total_spent, hookah_count)
             discount = metrics['discount_percent']
             total_spent_str = f"{total_spent:.2f}"
+            registration_date = client.get("registration_date", "N/A")
 
             writer.writerow([
                 name,
@@ -194,7 +195,8 @@ async def generate_clients_report_csv() -> str | None:
                 total_spent_str,
                 hookah_count,
                 free_hookahs_available,
-                discount
+                discount,
+                registration_date
             ])
         except Exception as e:
             logger.error(f"Failed to generate row for client {client}: {e}", exc_info=True)
