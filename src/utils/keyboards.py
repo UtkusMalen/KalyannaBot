@@ -96,6 +96,13 @@ def get_admin_panel_keyboard(user_id: int) -> InlineKeyboardMarkup:
                 callback_data="admin:waiters_report"
             )
         )
+        builder.row(
+            InlineKeyboardButton(
+                text=get_message('admin_panel.serviced_clients_report_button'),
+                callback_data="admin:serviced_clients_report"
+            )
+        )
+        builder.adjust(1,2,2)
     return builder.as_markup()
 
 def get_broadcast_confirmation_keyboard() -> InlineKeyboardMarkup:
@@ -120,5 +127,75 @@ def get_goto_admin_panel() -> InlineKeyboardMarkup:
             callback_data="admin:back_to_panel"
         )
     )
+    return builder.as_markup()
+
+def get_waiters_report_period_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_today_button'),
+            callback_data="admin:waiters_report_today"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_week_button'),
+            callback_data="admin:waiters_report_week"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_month_button'),
+            callback_data="admin:waiters_report_month"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_all_time_button'),
+            callback_data="admin:waiters_report_all_time_final"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.goto_panel'),
+            callback_data="admin:back_to_panel"
+        )
+    )
+    builder.adjust(2,2,1)
+    return builder.as_markup()
+
+def get_serviced_clients_report_period_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_today_button'),
+            callback_data="admin:serviced_clients_report_today"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_week_button'),
+            callback_data="admin:serviced_clients_report_week"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_month_button'),
+            callback_data="admin:serviced_clients_report_month"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.report_all_time_button'),
+            callback_data="admin:serviced_clients_report_all_time_final"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=get_message('admin_panel.goto_panel'),
+            callback_data="admin:back_to_panel"
+        )
+    )
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
 

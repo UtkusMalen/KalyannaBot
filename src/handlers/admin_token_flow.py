@@ -9,7 +9,6 @@ from aiogram.fsm.state import State, StatesGroup
 
 from src.logic import admin_logic
 from src.logic.profile_logic import calculate_profile_metrics
-from src.logic.admin_statistics import log_admin_action
 from src.filters.admin_filter import AdminFilter
 from src.utils.keyboards import get_admin_panel_keyboard, get_goto_profile, get_goto_admin_panel
 from src.utils.messages import get_message
@@ -21,11 +20,13 @@ router = Router()
 router.message.filter(AdminFilter())
 router.callback_query.filter(AdminFilter())
 
+
 class AdminTokenStates(StatesGroup):
     waiting_for_token = State()
     waiting_for_free_hookah_usage = State()
     waiting_for_amount = State()
     waiting_for_hookah_count = State()
+
 
 @router.callback_query(F.data == "admin:enter_token")
 async def handle_enter_token(callback: CallbackQuery, state: FSMContext, bot: Bot):
@@ -62,10 +63,12 @@ async def handle_enter_token(callback: CallbackQuery, state: FSMContext, bot: Bo
         )
         await state.clear()
 
+
 @router.message(AdminTokenStates.waiting_for_token, F.text)
 async def handle_token_input(message: Message, state: FSMContext, bot: Bot):
     entered_token = message.text.strip().upper()
-    admin_id = message.from_user.id
+    admin_user = message.from_user
+    admin_id = admin_user.id
     chat_id = message.chat.id
     context_data = await state.get_data()
     original_prompt_message_id = context_data.get('prompt_message_id')
@@ -92,7 +95,13 @@ async def handle_token_input(message: Message, state: FSMContext, bot: Bot):
         await safe_delete_message(bot, chat_id, message.message_id)
         await safe_delete_message(bot, chat_id, original_prompt_message_id)
 
-        await state.update_data(client_user_id=client_user_id, used_token=entered_token, client_name=user_name)
+        await state.update_data(
+            client_user_id=client_user_id,
+            used_token=entered_token,
+            client_name=user_name,
+            admin_tg_name=admin_user.full_name,
+            admin_tg_username=admin_user.username
+        )
 
         if available_free_hookahs > 0:
             logger.info(f"User {client_user_id} has {available_free_hookahs} free hookahs. Asking admin.")
@@ -130,6 +139,7 @@ async def handle_token_input(message: Message, state: FSMContext, bot: Bot):
             error_text=get_message('admin_panel.invalid_token')
         )
 
+
 @router.message(AdminTokenStates.waiting_for_free_hookah_usage, F.text)
 async def handle_free_hookah_usage(message: Message, state: FSMContext, bot: Bot):
     entered_free_hookahs_str = message.text.strip()
@@ -164,13 +174,15 @@ async def handle_free_hookah_usage(message: Message, state: FSMContext, bot: Bot
         logger.info(f"Admin {admin_id} state set to waiting_for_amount for client {client_user_id}.")
 
     except (ValueError, TypeError):
-        logger.warning(f"Admin {admin_id} entered invalid free hookah count '{entered_free_hookahs_str}' for client {client_user_id}")
+        logger.warning(
+            f"Admin {admin_id} entered invalid free hookah count '{entered_free_hookahs_str}' for client {client_user_id}")
         await send_temporary_error(
             bot=bot,
             chat_id=chat_id,
             user_message_id=message.message_id,
             error_text=get_message('admin_panel.invalid_hookah_count_range', max_available=available_free_hookahs)
         )
+
 
 @router.message(AdminTokenStates.waiting_for_amount, F.text)
 async def handle_amount_input(message: Message, state: FSMContext, bot: Bot):
@@ -218,10 +230,12 @@ async def handle_amount_input(message: Message, state: FSMContext, bot: Bot):
             error_text=get_message('admin_panel.invalid_amount')
         )
 
+
 @router.message(AdminTokenStates.waiting_for_hookah_count, F.text)
 async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bot):
     entered_hookah_count_str = message.text.strip()
-    admin_id = message.from_user.id
+    admin_user = message.from_user
+    admin_id = admin_user.id
     chat_id = message.chat.id
 
     context_data = await state.get_data()
@@ -231,13 +245,16 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
     prompt_message_id = context_data.get('prompt_message_id')
     used_free_hookahs = context_data.get('used_free_hookahs', 0)
 
+    admin_tg_name = context_data.get('admin_tg_name', admin_user.full_name)
+    admin_tg_username = context_data.get('admin_tg_username', admin_user.username)
+
     if not all([client_user_id, used_token, entered_amount_str is not None]):
-         logger.error(f"Admin {admin_id} in waiting_for_hookah_count, critical data missing: {context_data}")
-         await message.answer(get_message('admin_panel.internal_error'), reply_markup=get_goto_admin_panel())
-         await safe_delete_message(bot, chat_id, message.message_id)
-         await safe_delete_message(bot, chat_id, prompt_message_id)
-         await state.clear()
-         return
+        logger.error(f"Admin {admin_id} in waiting_for_hookah_count, critical data missing: {context_data}")
+        await message.answer(get_message('admin_panel.internal_error'), reply_markup=get_goto_admin_panel())
+        await safe_delete_message(bot, chat_id, message.message_id)
+        await safe_delete_message(bot, chat_id, prompt_message_id)
+        await state.clear()
+        return
 
     logger.info(f"Admin {admin_id} entered paid hookah count '{entered_hookah_count_str}' for client {client_user_id}.")
 
@@ -249,23 +266,13 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
         try:
             entered_amount = Decimal(entered_amount_str)
         except InvalidOperation:
-            logger.error(f"Could not convert stored amount '{entered_amount_str}' back to Decimal. State: {context_data}")
+            logger.error(
+                f"Could not convert stored amount '{entered_amount_str}' back to Decimal. State: {context_data}")
             raise ValueError("Invalid amount stored in state")
 
         await safe_delete_message(bot, chat_id, message.message_id)
         await safe_delete_message(bot, chat_id, prompt_message_id)
 
-        # Log the admin action before finalizing the update
-        await log_admin_action(
-            admin_id=admin_id,
-            admin_username=message.from_user.username,
-            action_type='transaction',
-            user_id=client_user_id,
-            amount=entered_amount,
-            hookah_count=hookah_count_added
-        )
-
-        logger.info(f"Calling finalize_user_update for {client_user_id} with: amount={entered_amount}, added_paid={hookah_count_added}, used_free={used_free_hookahs}")
         final_user_data = await admin_logic.finalize_user_update(
             client_user_id=client_user_id,
             used_token=used_token,
@@ -273,13 +280,13 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
             hookah_count_added=hookah_count_added,
             used_free_hookahs=used_free_hookahs,
             admin_id=admin_id,
-            admin_username=message.from_user.username or str(admin_id)
+            admin_name=admin_tg_name,
+            admin_username=admin_tg_username
         )
 
         if final_user_data:
             logger.info(f"Final update successful for user {client_user_id}. Final data: {final_user_data}")
-            
-            # Delete the QR code message from the user's chat
+
             try:
                 qr_message_id = final_user_data.get('qr_message_id')
                 if qr_message_id:
@@ -328,12 +335,11 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
                         amount_needed=f"{metrics.get('amount_needed_for_next_discount', Decimal('0.00')):.2f}"
                     )
                 elif current_discount_percent > 0:
-                     is_max_discount = all(total_spent >= threshold for threshold, _ in admin_logic.DISCOUNT_TIERS) if hasattr(admin_logic, 'DISCOUNT_TIERS') else False # Simple check, improve if needed
-                     if is_max_discount:
-                         discount_progress_section_for_notify = get_message('profile.discount_max_level_reached')
-                     elif metrics.get('amount_needed_for_next_discount') is None:
-                         discount_progress_section_for_notify = get_message('profile.discount_max_level_reached')
-
+                    is_max_discount = all(
+                        total_spent >= threshold for threshold, _ in admin_logic.DISCOUNT_TIERS) if hasattr(admin_logic,
+                                                                                                            'DISCOUNT_TIERS') else False
+                    if is_max_discount or metrics.get('amount_needed_for_next_discount') is None:
+                        discount_progress_section_for_notify = get_message('profile.discount_max_level_reached')
 
                 user_free_used_line = ""
                 if used_free_hookahs > 0:
@@ -360,24 +366,33 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
                 logger.info(f"Successfully sent update notification to user {client_user_id}")
             except TelegramAPIError as e:
                 logger.error(f"Failed to send notification to user {client_user_id}: {e}", exc_info=True)
-                await message.answer(f"⚠️ Не вдалося надіслати сповіщення користувачу {user_name} ({client_user_id}). Помилка: {e.message}", reply_markup=get_goto_admin_panel())
+                await message.answer(
+                    f"⚠️ Не вдалося надіслати сповіщення користувачу {user_name} ({client_user_id}). Помилка: {e.message}",
+                    reply_markup=get_goto_admin_panel())
             except Exception as notify_err:
-                 logger.error(f"Unexpected error preparing/sending notification to user {client_user_id}: {notify_err}", exc_info=True)
-                 await message.answer(f"⚠️ Не вдалося надіслати сповіщення користувачу {user_name} ({client_user_id}) через внутрішню помилку.", reply_markup=get_goto_admin_panel())
+                logger.error(f"Unexpected error preparing/sending notification to user {client_user_id}: {notify_err}",
+                             exc_info=True)
+                await message.answer(
+                    f"⚠️ Не вдалося надіслати сповіщення користувачу {user_name} ({client_user_id}) через внутрішню помилку.",
+                    reply_markup=get_goto_admin_panel())
 
             await state.clear()
 
         else:
-            logger.error(f"Failed to finalize update for client {client_user_id}. finalize_user_update returned None.")
+            logger.error(
+                f"Failed to finalize update for client {client_user_id}. finalize_user_update returned None or raised an error handled by it.")
             await message.answer(get_message('admin_panel.internal_error'), reply_markup=get_goto_admin_panel())
             await state.clear()
 
     except ValueError as e:
         error_message_key = 'admin_panel.invalid_hookah_count'
         log_message = f"Admin {admin_id} entered invalid hookah count: {entered_hookah_count_str}"
-        if "amount stored" in str(e):
+        if "amount stored" in str(e).lower():
             error_message_key = 'admin_panel.internal_error'
             log_message = f"Admin {admin_id} faced error due to invalid amount in state: {entered_amount_str}"
+        elif "insufficient_free_hookahs" in str(e).upper():
+            error_message_key = 'admin_panel.internal_error'
+            log_message = f"Admin {admin_id} tried to use more free hookahs than available for client {client_user_id}"
 
         logger.warning(f"{log_message}. Error: {e}")
         await send_temporary_error(
@@ -386,9 +401,9 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
             user_message_id=message.message_id,
             error_text=get_message(error_message_key)
         )
-
     except Exception as e:
-        logger.error(f"Unexpected error processing hookah count or finalization for client {client_user_id}: {e}", exc_info=True)
+        logger.error(f"Unexpected error processing hookah count or finalization for client {client_user_id}: {e}",
+                     exc_info=True)
         await message.answer(get_message('admin_panel.internal_error'), reply_markup=get_goto_admin_panel())
         await safe_delete_message(bot, chat_id, message.message_id)
         await safe_delete_message(bot, chat_id, prompt_message_id)
