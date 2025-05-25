@@ -1,13 +1,12 @@
-import logging
 import csv
 import io
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TypedDict, Optional, List, Dict, Any
 
-from aiogram import Bot
-
 from src.database.manager import db_manager
+from src.logic.admin_statistics import log_admin_action
 from src.logic.profile_logic import calculate_profile_metrics
 
 logger = logging.getLogger(__name__)
@@ -21,6 +20,7 @@ class UserDataForUpdate(TypedDict):
     hookah_count: int
     free_hookahs_available: int
     total_spent: Decimal
+    qr_message_id: Optional[int]
 
 async def validate_token(token: str) -> Optional[ValidTokenInfo]:
     sql_find_token = """
@@ -55,7 +55,9 @@ async def get_user_initial_data(user_id: int) -> Optional[dict]:
         logger.error(f"Failed to fetch initial data for user {user_id}: {e}", exc_info=True)
         return None
 
-async def finalize_user_update(client_user_id: int,used_token: str,entered_amount: Decimal,hookah_count_added: int,used_free_hookahs: int, bot: Bot) -> Optional[UserDataForUpdate]:
+async def finalize_user_update(client_user_id: int, used_token: str, entered_amount: Decimal,
+                               hookah_count_added: int, used_free_hookahs: int, 
+                               admin_id: int, admin_username: str) -> Optional[UserDataForUpdate]:
     sql_get_current_counts = """
     SELECT name, hookah_count, free_hookahs_available, total_spent
     FROM users WHERE user_id = $1 FOR UPDATE;
@@ -70,6 +72,10 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
     """
     sql_get_message_id = "SELECT message_id FROM temporary_codes WHERE secret_code = $1 AND user_id = $2;"
     sql_delete_token = "DELETE FROM temporary_codes WHERE secret_code = $1 AND user_id = $2;"
+    """
+    SELECT user_id, name FROM users 
+    WHERE user_id = $1;
+    """
 
     conn_context_manager = await db_manager.get_connection()
     async with conn_context_manager as conn:
@@ -83,12 +89,26 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
                 if message_record and message_record['message_id']:
                     message_to_delete = message_record['message_id']
                     logger.info(f"Found message_id {message_to_delete} associated with token {used_token} for user {client_user_id}.")
+
                 current_data = await conn.fetchrow(sql_get_current_counts, client_user_id)
                 if not current_data:
                     logger.error(f"User {client_user_id} not found during final GET. Rolling back.")
                     raise Exception(f"User {client_user_id} not found")
 
                 current_free_available = current_data.get('free_hookahs_available', 0)
+                current_total_spent = current_data.get('total_spent', 0)
+
+                if current_total_spent == 0 and entered_amount > 0:
+                    try:
+                        await log_admin_action(
+                            admin_id=admin_id,
+                            admin_username=admin_username,
+                            action_type='user_registered',
+                            user_id=client_user_id
+                        )
+                        logger.info(f"Logged new user registration for first-time spender: {client_user_id} by admin {admin_id} ({admin_username})")
+                    except Exception as e:
+                        logger.error(f"Failed to log new user registration: {e}", exc_info=True)
 
                 if current_free_available < used_free_hookahs:
                     logger.error(f"Insufficient free hookahs for user {client_user_id}. Available: {current_free_available}, Tried to use: {used_free_hookahs}. Rolling back.")
@@ -100,52 +120,36 @@ async def finalize_user_update(client_user_id: int,used_token: str,entered_amoun
 
                 logger.info(f"Finalizing update for {client_user_id}: Amount={entered_amount}, AddedPaid={hookah_count_added}, UsedFree={used_free_hookahs}, EarnedFree={newly_earned_free}")
 
-                updated_user_data = await conn.fetchrow(
+                updated_user = await conn.fetchrow(
                     sql_update_user_final,
-                    entered_amount,
+                    float(entered_amount),
                     hookah_count_added,
                     used_free_hookahs,
                     newly_earned_free,
                     client_user_id
                 )
 
-                if not updated_user_data:
-                    logger.error(f"User {client_user_id} UPDATE failed or returned no data within transaction. Possibly due to concurrency or insufficient free hookahs check failed at DB level. Rolling back.")
-                    raise Exception(f"User {client_user_id} update failed during UPDATE.")
+                if not updated_user:
+                    logger.error(f"Failed to update user {client_user_id}. Possible race condition or insufficient free hookahs.")
+                    return None
 
-                delete_result = await conn.execute(sql_delete_token, used_token, client_user_id)
-                if not delete_result or 'DELETE 0' in delete_result:
-                     logger.warning(f"Token {used_token} for user {client_user_id} might not have been deleted (Result: {delete_result}). Transaction continues but investigate.")
+                message_record = await conn.fetchrow(sql_get_message_id, used_token, client_user_id)
+                qr_message_id = message_record['message_id'] if message_record and 'message_id' in message_record else None
 
+                await conn.execute(sql_delete_token, used_token, client_user_id)
+                logger.info(f"Successfully updated user {client_user_id} and deleted token {used_token}")
 
-                logger.info(f"Transaction successful for user {client_user_id}. Final data: {updated_user_data}")
-                final_data = UserDataForUpdate(
-                    name=updated_user_data['name'],
-                    total_spent=updated_user_data['total_spent'],
-                    hookah_count=updated_user_data['hookah_count'],
-                    free_hookahs_available=updated_user_data['free_hookahs_available']
+                return UserDataForUpdate(
+                    name=updated_user['name'],
+                    hookah_count=updated_user['hookah_count'],
+                    free_hookahs_available=updated_user['free_hookahs_available'],
+                    total_spent=updated_user['total_spent'],
+                    qr_message_id=qr_message_id
                 )
 
-            except ValueError as ve:
-                if str(ve) == "INSUFFICIENT_FREE_HOOKAHS":
-                    logger.warning(f"Transaction rolled back for user {client_user_id} due to insufficient free hookahs.")
-                    return None
-                else:
-                    logger.error(f"Transaction failed for user {client_user_id} with ValueError: {ve}", exc_info=True)
-                    return None
             except Exception as e:
-                logger.error(f"Transaction failed for user {client_user_id}: {e}", exc_info=True)
-                return None
-
-    if message_to_delete:
-        try:
-            await bot.delete_message(chat_id=client_user_id, message_id=message_to_delete)
-            logger.info(f"Successfully deleted QR message {message_to_delete} for user {client_user_id} after admin use.")
-        except Exception as e:
-            logger.error(f"Unexpected error deleting QR message {message_to_delete} for user {client_user_id}: {e}",exc_info=True)
-
-    return final_data
-
+                logger.error(f"Error in finalize_user_update for user {client_user_id}: {e}", exc_info=True)
+                raise
 
 async def get_all_clients_data() -> List[Dict[str, Any]] | None:
     sql_get_all = """

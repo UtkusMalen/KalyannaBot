@@ -90,6 +90,12 @@ def get_admin_panel_keyboard(user_id: int) -> InlineKeyboardMarkup:
                 callback_data="admin:start_broadcast"
             )
         )
+        builder.row(
+            InlineKeyboardButton(
+                text=get_message('admin_panel.waiters_report_button'),
+                callback_data="admin:waiters_report"
+            )
+        )
     return builder.as_markup()
 
 def get_broadcast_confirmation_keyboard() -> InlineKeyboardMarkup:

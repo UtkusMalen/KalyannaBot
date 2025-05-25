@@ -5,8 +5,8 @@ from aiogram import Router, Bot, F
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, BufferedInputFile
 
-from src.logic import admin_logic
 from src.filters.super_admin_filter import SuperAdminFilter
+from src.logic import admin_logic
 from src.utils.keyboards import get_goto_admin_panel
 from src.utils.messages import get_message
 from src.utils.tg_utils import safe_delete_message
@@ -35,11 +35,11 @@ async def handle_list_clients(callback: CallbackQuery, bot: Bot):
 
     await safe_delete_message(bot, chat_id, message_id_to_delete)
 
-    csv_content = await admin_logic.generate_clients_report_csv()
+    csv_buffer = await admin_logic.generate_clients_report_csv()
 
-    if csv_content:
+    if csv_buffer:
         try:
-            report_bytes = csv_content.encode('utf-8-sig')
+            report_bytes = csv_buffer.encode('utf-8-sig')
             filename = f"clients_report_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
             report_file = BufferedInputFile(file=report_bytes, filename=filename)
 

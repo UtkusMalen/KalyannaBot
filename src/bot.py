@@ -8,7 +8,8 @@ from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeCha
 
 from src.config import settings
 from src.database.backup import create_db_backup
-from src.handlers import registration, main_menu, qr_handler, admin_main, admin_reports, admin_broadcasts, admin_token_flow, profile, instruction, booking
+from src.handlers import registration, main_menu, qr_handler, admin_main, admin_reports, admin_broadcasts, \
+    admin_token_flow, profile, instruction, booking, waiters_report
 from src.database.manager import db_manager
 from src.utils.messages import get_message
 from src.utils.tg_utils import safe_delete_message
@@ -199,6 +200,7 @@ async def main():
     dp.include_router(profile.router)
     dp.include_router(instruction.router)
     dp.include_router(booking.router)
+    dp.include_router(waiters_report.router)
 
     logging.info("Запуск бота...")
     await dp.start_polling(bot)

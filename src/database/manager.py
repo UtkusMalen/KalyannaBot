@@ -30,6 +30,24 @@ class DatabaseManager:
     CREATE INDEX IF NOT EXISTS idx_temporary_codes_expires_at ON temporary_codes (expires_at);
     CREATE INDEX IF NOT EXISTS idx_temporary_codes_user_id_expires ON temporary_codes (user_id, expires_at);
     """
+    
+    CREATE_ADMIN_ACTIONS_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS admin_actions (
+        id SERIAL PRIMARY KEY,
+        admin_id BIGINT NOT NULL,
+        admin_username TEXT,
+        action_type TEXT NOT NULL,
+        user_id BIGINT,
+        amount NUMERIC(10,2),
+        hookah_count INTEGER,
+        action_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+    """
+    
+    CREATE_ADMIN_ACTIONS_INDEX_SQL = """
+    CREATE INDEX IF NOT EXISTS idx_admin_actions_admin_id ON admin_actions(admin_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_actions_action_date ON admin_actions(action_date);
+    """
     def __init__(self):
         self.host = settings.db_host
         self.port = settings.db_port
@@ -53,6 +71,12 @@ class DatabaseManager:
 
                     result_index = await conn.execute(self.CREATE_TEMP_CODES_INDEX_SQL)
                     logging.info(f"Indexes for 'temporary_codes' checked/created successfully. Result: {result_index}")
+                    
+                    result_actions = await conn.execute(self.CREATE_ADMIN_ACTIONS_TABLE_SQL)
+                    logging.info(f"Table 'admin_actions' checked/created successfully. Result: {result_actions}")
+                    
+                    result_actions_idx = await conn.execute(self.CREATE_ADMIN_ACTIONS_INDEX_SQL)
+                    logging.info(f"Indexes for 'admin_actions' checked/created successfully. Result: {result_actions_idx}")
                     return True
 
         except Exception as e:

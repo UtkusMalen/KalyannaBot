@@ -9,6 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from src.logic import admin_logic
 from src.logic.profile_logic import calculate_profile_metrics
+from src.logic.admin_statistics import log_admin_action
 from src.filters.admin_filter import AdminFilter
 from src.utils.keyboards import get_admin_panel_keyboard, get_goto_profile, get_goto_admin_panel
 from src.utils.messages import get_message
@@ -56,11 +57,10 @@ async def handle_enter_token(callback: CallbackQuery, state: FSMContext, bot: Bo
         await callback.answer("Сталася помилка під час оновлення повідомлення.", show_alert=True)
         await message.answer(
             text=get_message('admin_panel.welcome'),
-            reply_markup=get_admin_panel_keyboard(),
+            reply_markup=get_admin_panel_keyboard(user_id),
             parse_mode='HTML'
         )
         await state.clear()
-
 
 @router.message(AdminTokenStates.waiting_for_token, F.text)
 async def handle_token_input(message: Message, state: FSMContext, bot: Bot):
@@ -121,7 +121,6 @@ async def handle_token_input(message: Message, state: FSMContext, bot: Bot):
                 prompt_message_id=amount_prompt_msg.message_id
             )
             await state.set_state(AdminTokenStates.waiting_for_amount)
-
     else:
         logger.warning(f"Admin {admin_id} entered invalid/expired token: {entered_token}")
         await send_temporary_error(
@@ -202,16 +201,15 @@ async def handle_amount_input(message: Message, state: FSMContext, bot: Bot):
         await safe_delete_message(bot, chat_id, prompt_message_id)
 
         await state.update_data(entered_amount=str(amount))
-        logger.info(f"Stored amount {amount} for admin {admin_id}, client {client_user_id}.")
-
         hookah_prompt_msg = await message.answer(
-            get_message('admin_panel.enter_hookah_count', user_name=user_name), parse_mode='HTML'
+            get_message('admin_panel.enter_hookah_count', user_name=user_name, amount=f"{amount:.2f}"),
+            parse_mode='HTML'
         )
         await state.update_data(prompt_message_id=hookah_prompt_msg.message_id)
         await state.set_state(AdminTokenStates.waiting_for_hookah_count)
         logger.info(f"Admin {admin_id} state set to waiting_for_hookah_count for client {client_user_id}.")
 
-    except (InvalidOperation, ValueError):
+    except (ValueError, InvalidOperation):
         logger.warning(f"Admin {admin_id} entered invalid amount: {entered_amount_str}")
         await send_temporary_error(
             bot=bot,
@@ -257,18 +255,40 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
         await safe_delete_message(bot, chat_id, message.message_id)
         await safe_delete_message(bot, chat_id, prompt_message_id)
 
+        # Log the admin action before finalizing the update
+        await log_admin_action(
+            admin_id=admin_id,
+            admin_username=message.from_user.username,
+            action_type='transaction',
+            user_id=client_user_id,
+            amount=entered_amount,
+            hookah_count=hookah_count_added
+        )
+
         logger.info(f"Calling finalize_user_update for {client_user_id} with: amount={entered_amount}, added_paid={hookah_count_added}, used_free={used_free_hookahs}")
         final_user_data = await admin_logic.finalize_user_update(
-            bot=bot,
             client_user_id=client_user_id,
             used_token=used_token,
             entered_amount=entered_amount,
             hookah_count_added=hookah_count_added,
-            used_free_hookahs=used_free_hookahs
+            used_free_hookahs=used_free_hookahs,
+            admin_id=admin_id,
+            admin_username=message.from_user.username or str(admin_id)
         )
 
         if final_user_data:
             logger.info(f"Final update successful for user {client_user_id}. Final data: {final_user_data}")
+            
+            # Delete the QR code message from the user's chat
+            try:
+                qr_message_id = final_user_data.get('qr_message_id')
+                if qr_message_id:
+                    await safe_delete_message(bot, client_user_id, qr_message_id)
+                    logger.info(f"Successfully deleted QR code message {qr_message_id} for user {client_user_id}")
+                else:
+                    logger.warning(f"No QR code message ID found in final_user_data for user {client_user_id}")
+            except Exception as e:
+                logger.error(f"Failed to delete QR code message for user {client_user_id}: {e}", exc_info=True)
 
             user_name = final_user_data['name']
             total_spent = final_user_data['total_spent']
@@ -344,7 +364,6 @@ async def handle_hookah_count_input(message: Message, state: FSMContext, bot: Bo
             except Exception as notify_err:
                  logger.error(f"Unexpected error preparing/sending notification to user {client_user_id}: {notify_err}", exc_info=True)
                  await message.answer(f"⚠️ Не вдалося надіслати сповіщення користувачу {user_name} ({client_user_id}) через внутрішню помилку.", reply_markup=get_goto_admin_panel())
-
 
             await state.clear()
 
